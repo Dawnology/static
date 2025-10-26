@@ -1,8 +1,8 @@
 // File: functions/launching.js
 
 export async function onRequest(context) {
-  // 1. Đây là nội dung JSON bạn đã cung cấp
-  const jsonData = {
+  // 1. Đây là nội dung JSON gốc của bạn
+  const baseJsonData = {
     "data": [
       {
         "app_package": "",
@@ -33,20 +33,43 @@ export async function onRequest(context) {
     "errmsg": "ok"
   };
 
-  // 2. Chuyển đổi đối tượng JavaScript thành chuỗi JSON để gửi đi
-  const responseBody = JSON.stringify(jsonData);
+  // 2. Tính toán padding để đạt Content-Length = 5192
+  const targetSize = 5192;
+  const initialJsonString = JSON.stringify(baseJsonData);
+  // Kích thước của chuỗi JSON ban đầu (trừ dấu } cuối cùng)
+  const initialSize = new TextEncoder().encode(initialJsonString.slice(0, -1)).length; 
+  // Kích thước của cú pháp thêm vào: ',"padding":""}'
+  const syntaxSize = new TextEncoder().encode(',"padding":""}').length; 
+  // Số byte cần thêm vào
+  const paddingSize = targetSize - initialSize - syntaxSize;
 
-  // 3. Thiết lập các header giả mạo
+  if (paddingSize > 0) {
+    baseJsonData.padding = ' '.repeat(paddingSize);
+  }
+
+  // 3. Chuyển đổi đối tượng JSON cuối cùng thành chuỗi
+  const responseBody = JSON.stringify(baseJsonData);
+
+  // 4. Thiết lập tất cả các header giả mạo
   const customHeaders = {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Connection': 'close',
-    'X-Trace-ID': 'a8b6086f3802da0c8459eec9e4d00b1b',
-    'ntes-trace-id': '61e6fb24eb8d089d:61e6fb24eb8d089d:0:0',
-    // Header 'Server' sẽ bị Cloudflare ghi đè
-    'Server': 'nginx' 
+    'Content-Type': 'application/json',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Cache-Control': 'public, max-age=0, must-revalidate',
+    'ETag': '"94da76618494f6a50d14fe46c45387e6"',
+    'referrer-policy': 'strict-origin-when-cross-origin',
+    'x-content-type-options': 'nosniff',
+    'x-robots-tag': 'noindex',
+    'Vary': 'accept-encoding',
+    'Report-To': '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=1GgWNnF3dDmr9pjX6VjLwEVlm0JrSY44%2F33xVNlbWlCGmKWDscdhQA0e5oegv8EjWzawgxT6ntaowp5%2FVrwWwwCjSK3MDXQFmWJCAKyiQKr9lpnjyr%2FV6ppSR7zO"}]}',
+    'Nel': '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}',
+    
+    // Các header này sẽ do Cloudflare tự động đặt và ghi đè
+    'Server': 'cloudflare', // Sẽ bị ghi đè thành 'cloudflare'
+    'CF-RAY': '99483b5299deaeb8-NRT' // Không thể giả mạo, sẽ được tạo mới cho mỗi yêu cầu
   };
 
-  // 4. Trả về một đối tượng Response hoàn chỉnh
+  // 5. Trả về đối tượng Response hoàn chỉnh
   return new Response(responseBody, {
     status: 200,
     headers: customHeaders
